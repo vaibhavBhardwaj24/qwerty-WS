@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Block {
+  id           String         @id
+  pageId       String
+  parentId     String?
+  type         String
+  content      Json
+  order        Int
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime
+  lastSyncedAt DateTime?
+  Page         Page           @relation(fields: [pageId], references: [id])
+  Block        Block?         @relation("BlockToBlock", fields: [parentId], references: [id])
+  other_Block  Block[]        @relation("BlockToBlock")
+  BlockVersion BlockVersion[]
+  Comment      Comment[]
+}
+
+model BlockVersion {
+  id        String   @id
+  blockId   String
+  content   Json
+  createdAt DateTime @default(now())
+  changedBy String
+  Block     Block    @relation(fields: [blockId], references: [id])
+}
+
+model Comment {
+  id        String   @id
+  blockId   String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  Block     Block    @relation(fields: [blockId], references: [id])
+}
+
+model Favorite {
+  userId String
+  pageId String
+  Page   Page   @relation(fields: [pageId], references: [id])
+
+  @@id([userId, pageId])
+}
+
+model Mentions {
+  id          String    @id
+  userId      String
+  workspaceId String
+  mentionedBy String
+  pageId      String
+  createdAt   DateTime  @default(now())
+  Page        Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  Workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Notification {
+  id          String    @id
+  userId      String
+  workspaceId String
+  type        String
+  message     String
+  createdAt   DateTime  @default(now())
+  read        Boolean   @default(false)
+  Workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Page {
+  id          String        @id
+  workspaceId String
+  title       String
+  icon        String?
+  cover       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  private     Boolean       @default(false)
+  Block       Block[]
+  Favorite    Favorite[]
+  Mentions    Mentions[]
+  Workspace   Workspace     @relation(fields: [workspaceId], references: [id])
+  YjsSnapshot YjsSnapshot[]
+}
+
+model Tasks {
+  id              String            @id
+  workspaceId     String
+  title           String
+  status          String            @default("pending")
+  priority        String            @default("low")
+  createdAt       DateTime          @default(now())
+  dueDate         DateTime?
+  Workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  WorkspaceMember WorkspaceMember[]
+}
+
+model Workspace {
+  id              String            @id
+  name            String
+  ownerId         String
+  createdAt       DateTime          @default(now())
+  icon            String?
+  slug            String?           @unique
+  Mentions        Mentions[]
+  Notification    Notification[]
+  Page            Page[]
+  Tasks           Tasks[]
+  WorkspaceMember WorkspaceMember[]
+}
+
+model WorkspaceMember {
+  id          String    @id
+  workspaceId String
+  userId      String
+  role        String
+  createdAt   DateTime  @default(now())
+  name        String
+  Workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  Tasks       Tasks[]
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model YjsSnapshot {
+  id        String   @id
+  pageId    String
+  snapshot  Bytes
+  version   Int
+  createdAt DateTime @default(now())
+  createdBy String
+  Page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([pageId])
+}

@@ -1,0 +1,40 @@
+{
+  "name": "qwerty-ws",
+  "version": "1.0.0",
+  "description": "WebSocket collaboration server for qwerty",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "worker": "tsx src/workers/snapshot-worker.ts",
+    "worker:dev": "tsx watch src/workers/snapshot-worker.ts"
+  },
+  "keywords": [
+    "websocket",
+    "collaboration",
+    "yjs",
+    "hocuspocus"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@hocuspocus/extension-redis": "^2.13.5",
+    "@hocuspocus/server": "^2.13.5",
+    "@prisma/adapter-pg": "^7.2.0",
+    "@prisma/client": "^7.2.0",
+    "bullmq": "^5.28.3",
+    "dotenv": "^16.4.7",
+    "ioredis": "^5.4.2",
+    "jose": "^5.9.6",
+    "ws": "^8.18.0",
+    "yjs": "^13.6.20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.13",
+    "prisma": "^7.2.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
