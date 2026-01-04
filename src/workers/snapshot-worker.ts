@@ -1,18 +1,11 @@
 import { Worker } from "bullmq";
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { prisma } from "../lib/prisma";
 import IORedis from "ioredis";
 import { SnapshotJobData } from "../queue/snapshot-queue";
-import { deserializeYDoc, yjsToBlocks } from "../utils/yjs-serializer";
+import { base64ToYjsState } from "../utils/yjs-serializer";
 import * as dotenv from "dotenv";
 
 dotenv.config();
-
-// Use the Prisma client from the main app (shares the same database)
-// The client is generated in ../node_modules/.prisma/client
-const connectionString = process.env.DATABASE_URL || "";
-const adapter = new PrismaPg({ connectionString });
-const prisma = new PrismaClient({ adapter });
 
 const redisUrl = process.env.BULLMQ_REDIS_URL || "redis://localhost:6379";
 const redisPassword = process.env.REDIS_PASSWORD;
@@ -23,7 +16,7 @@ const connection = new IORedis(redisUrl, {
 });
 
 /**
- * Process snapshot jobs: Convert Yjs state to Prisma blocks
+ * Process snapshot jobs: Save Yjs state to Postgres
  */
 const worker = new Worker<SnapshotJobData>(
   "snapshot",
@@ -33,86 +26,21 @@ const worker = new Worker<SnapshotJobData>(
     console.log(`Processing snapshot for page ${pageId}...`);
 
     try {
-      // Deserialize Yjs document
-      const ydoc = deserializeYDoc(yjsState);
-      const blocks = yjsToBlocks(ydoc);
+      // Decode Base64 to binary
+      const binaryState = base64ToYjsState(yjsState);
 
-      // Start transaction
-      await prisma.$transaction(async (tx) => {
-        // Get existing blocks for this page
-        const existingBlocks = await tx.block.findMany({
-          where: { pageId },
-          select: { id: true },
-        });
-
-        const existingBlockIds = new Set(existingBlocks.map((b) => b.id));
-        const newBlockIds = new Set(blocks.map((b) => b.id));
-
-        // Delete blocks that no longer exist in Yjs
-        const blocksToDelete = existingBlocks
-          .filter((b) => !newBlockIds.has(b.id))
-          .map((b) => b.id);
-
-        if (blocksToDelete.length > 0) {
-          await tx.block.deleteMany({
-            where: {
-              id: { in: blocksToDelete },
-            },
-          });
-          console.log(`  Deleted ${blocksToDelete.length} blocks`);
-        }
-
-        // Upsert blocks from Yjs
-        for (const block of blocks) {
-          const isNew = !existingBlockIds.has(block.id);
-
-          await tx.block.upsert({
-            where: { id: block.id },
-            create: {
-              id: block.id,
-              pageId,
-              type: block.type,
-              content: block.content,
-              parentId: block.parentId,
-              order: block.order,
-              lastSyncedAt: new Date(),
-            },
-            update: {
-              type: block.type,
-              content: block.content,
-              parentId: block.parentId,
-              order: block.order,
-              lastSyncedAt: new Date(),
-            },
-          });
-
-          // Create version record for tracking
-          if (!isNew) {
-            await tx.blockVersion.create({
-              data: {
-                blockId: block.id,
-                content: block.content,
-                changedBy: triggeredBy,
-              },
-            });
-          }
-        }
-
-        // Create snapshot record
-        await tx.yjsSnapshot.create({
-          data: {
-            pageId,
-            snapshot: Buffer.from(yjsState),
-            version: Math.floor(timestamp / 1000),
-            createdBy: triggeredBy,
-          },
-        });
-
-        console.log(`  Upserted ${blocks.length} blocks`);
+      // Create snapshot record
+      await prisma.yjsSnapshot.create({
+        data: {
+          pageId,
+          snapshot: Buffer.from(binaryState),
+          version: Math.floor(timestamp / 1000),
+          createdBy: triggeredBy,
+        },
       });
 
       console.log(`✓ Snapshot completed for page ${pageId}`);
-      return { success: true, blocksProcessed: blocks.length };
+      return { success: true };
     } catch (error) {
       console.error(`✗ Snapshot failed for page ${pageId}:`, error);
       throw error;

@@ -11,7 +11,7 @@ const connection = new RedisClient(redisUrl);
 
 export interface SnapshotJobData {
   pageId: string;
-  yjsState: Uint8Array;
+  yjsState: string; // Base64 encoded Yjs state
   triggeredBy: string;
   timestamp: number;
 }

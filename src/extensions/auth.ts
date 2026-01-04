@@ -1,5 +1,6 @@
 import { jwtVerify } from "jose";
 import { IncomingMessage } from "http";
+import { prisma } from "../lib/prisma";
 
 interface AuthContext {
   userId: string;
@@ -58,10 +59,9 @@ export async function verifyPageAccess(
   userId: string,
   pageId: string
 ): Promise<boolean> {
-  // Import Prisma client dynamically to avoid circular dependencies
-  const { PrismaClient } = await import("@prisma/client");
-  const prisma = new PrismaClient();
-
+  console.log(
+    `[verifyPageAccess] Checking access for User:${userId} on Page:${pageId}`
+  );
   try {
     // Get the page with workspace info
     const page = await prisma.page.findUnique({
@@ -78,13 +78,21 @@ export async function verifyPageAccess(
     });
 
     if (!page) {
+      console.warn(`[verifyPageAccess] Page not found: ${pageId}`);
       return false;
     }
 
     // Check if user is a member of the workspace
     const isMember = page.workspace.members.length > 0;
+    console.log(
+      `[verifyPageAccess] User membership status: ${
+        isMember ? "MEMBER" : "NOT_A_MEMBER"
+      }`
+    );
+
     return isMember;
-  } finally {
-    await prisma.$disconnect();
+  } catch (error) {
+    console.error("[verifyPageAccess] Database query failed:", error);
+    return false;
   }
 }

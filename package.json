@@ -19,6 +19,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@hocuspocus/extension-database": "^2.15.3",
     "@hocuspocus/extension-redis": "^2.13.5",
     "@hocuspocus/server": "^2.13.5",
     "@prisma/adapter-pg": "^7.2.0",

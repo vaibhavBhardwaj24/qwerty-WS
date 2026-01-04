@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import crypto from "crypto";
 
 export interface BlockData {
   id: string;
@@ -9,25 +10,78 @@ export interface BlockData {
 }
 
 /**
- * Convert Yjs document to array of blocks
+ * Generate a deterministic ID for a block based on its content
+ */
+function generateBlockId(
+  type: string,
+  order: number,
+  textContent: string
+): string {
+  const hash = crypto
+    .createHash("sha256")
+    .update(`${type}-${order}-${textContent}`)
+    .digest("hex");
+  return hash.substring(0, 16); // Use first 16 chars for readability
+}
+
+/**
+ * Convert Yjs document (Tiptap/ProseMirror) to array of blocks
  */
 export function yjsToBlocks(ydoc: Y.Doc): BlockData[] {
-  const blocksMap = ydoc.getMap("blocks");
   const blocks: BlockData[] = [];
 
-  blocksMap.forEach((value, key) => {
-    const blockData = value as any;
-    blocks.push({
-      id: key,
-      type: blockData.type || "paragraph",
-      content: blockData.content || {},
-      parentId: blockData.parentId || null,
-      order: blockData.order || 0,
-    });
-  });
+  try {
+    // Tiptap stores content in an XmlFragment called 'default'
+    const fragment = ydoc.getXmlFragment("default");
 
-  // Sort by order
-  return blocks.sort((a, b) => a.order - b.order);
+    if (!fragment) {
+      console.warn("[yjsToBlocks] No 'default' fragment found in Yjs document");
+      return blocks;
+    }
+
+    let order = 0;
+
+    // Iterate through all nodes in the fragment
+    fragment.forEach((item) => {
+      if (item instanceof Y.XmlElement) {
+        const nodeName = item.nodeName;
+        const attrs = item.getAttributes();
+
+        // Extract text content
+        let textContent = "";
+        const extractText = (node: Y.XmlElement | Y.XmlText): void => {
+          if (node instanceof Y.XmlText) {
+            textContent += node.toString();
+          } else if (node instanceof Y.XmlElement) {
+            node.forEach((child) => extractText(child as any));
+          }
+        };
+        extractText(item);
+
+        // Create block data with deterministic ID
+        const block: BlockData = {
+          id: generateBlockId(nodeName, order, textContent),
+          type: nodeName, // e.g., 'paragraph', 'heading', 'bulletList'
+          content: {
+            text: textContent,
+            attrs: attrs,
+          },
+          parentId: null,
+          order: order++,
+        };
+
+        blocks.push(block);
+      }
+    });
+
+    console.log(
+      `[yjsToBlocks] Extracted ${blocks.length} blocks from Tiptap content`
+    );
+  } catch (error) {
+    console.error("[yjsToBlocks] Error extracting blocks:", error);
+  }
+
+  return blocks;
 }
 
 /**
