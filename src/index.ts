@@ -3,6 +3,8 @@ import * as Y from "yjs";
 import * as dotenv from "dotenv";
 import crypto from "crypto";
 import express from "express";
+import { createServer } from "http";
+import { WebSocketServer } from "ws";
 import { createRedisPersistence } from "./extensions/redis-persistence";
 import { authenticateConnection, verifyPageAccess } from "./extensions/auth";
 import { queueSnapshot } from "./queue/snapshot-queue";
@@ -58,9 +60,18 @@ async function saveSnapshotDirect(
   });
 }
 
-const server = Server.configure({
-  port,
+// Create Express app for HTTP endpoints
+const app = express();
+app.get("/api/all-checks", healthCheckHandler);
 
+// Create HTTP server with Express
+const httpServer = createServer(app);
+
+// Create WebSocket server
+const wss = new WebSocketServer({ noServer: true });
+
+// Configure Hocuspocus without port (we'll handle upgrade manually)
+const server = Server.configure({
   extensions: [createRedisPersistence()],
 
   async onAuthenticate(data: any) {
@@ -258,29 +269,26 @@ const server = Server.configure({
   },
 });
 
-server.listen();
-
-// Create Express app for HTTP endpoints
-const app = express();
-const httpPort = parseInt(process.env.HTTP_PORT || "1235", 10);
-
-// Health check endpoint
-app.get("/api/all-checks", healthCheckHandler);
-
-// Start HTTP server
-app.listen(httpPort, () => {
-  console.log(`✓ HTTP server listening on port ${httpPort}`);
+// Handle WebSocket upgrade requests
+httpServer.on("upgrade", (request, socket, head) => {
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    server.handleConnection(ws, request);
+  });
 });
 
-console.log("🚀 Hocuspocus WebSocket server started");
-console.log(`   WebSocket Port: ${port}`);
-console.log(`   HTTP Port: ${httpPort}`);
-console.log(`   Redis: ${process.env.REDIS_URL || "redis://localhost:6379"}`);
-console.log(
-  `   Snapshots: ${
-    USE_SNAPSHOT_QUEUE ? "BullMQ Queue" : "Direct Save"
-  } (on disconnect)`
-);
+// Start the HTTP server (handles both HTTP and WebSocket)
+httpServer.listen(port, () => {
+  console.log("🚀 Hocuspocus WebSocket server started");
+  console.log(`   Port: ${port}`);
+  console.log(`   WebSocket: ws://0.0.0.0:${port}`);
+  console.log(`   HTTP API: http://0.0.0.0:${port}/api/all-checks`);
+  console.log(`   Redis: ${process.env.REDIS_URL || "redis://localhost:6379"}`);
+  console.log(
+    `   Snapshots: ${
+      USE_SNAPSHOT_QUEUE ? "BullMQ Queue" : "Direct Save"
+    } (on disconnect)`
+  );
+});
 
 // Graceful shutdown
 process.on("SIGTERM", () => {
