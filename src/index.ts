@@ -265,7 +265,7 @@ const app = express();
 const httpPort = parseInt(process.env.HTTP_PORT || "1235", 10);
 
 // Health check endpoint
-app.get("/health", healthCheckHandler);
+app.get("/api/health", healthCheckHandler);
 
 // Start HTTP server
 app.listen(httpPort, () => {
