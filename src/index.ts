@@ -2,6 +2,7 @@ import { Server } from "@hocuspocus/server";
 import * as Y from "yjs";
 import * as dotenv from "dotenv";
 import crypto from "crypto";
+import express from "express";
 import { createRedisPersistence } from "./extensions/redis-persistence";
 import { authenticateConnection, verifyPageAccess } from "./extensions/auth";
 import { queueSnapshot } from "./queue/snapshot-queue";
@@ -11,6 +12,7 @@ import {
   base64ToYjsState,
 } from "./utils/yjs-serializer";
 import { prisma } from "./lib/prisma";
+import { healthCheckHandler } from "./routes/health";
 
 dotenv.config();
 
@@ -258,8 +260,21 @@ const server = Server.configure({
 
 server.listen();
 
+// Create Express app for HTTP endpoints
+const app = express();
+const httpPort = parseInt(process.env.HTTP_PORT || "1235", 10);
+
+// Health check endpoint
+app.get("/health", healthCheckHandler);
+
+// Start HTTP server
+app.listen(httpPort, () => {
+  console.log(`✓ HTTP server listening on port ${httpPort}`);
+});
+
 console.log("🚀 Hocuspocus WebSocket server started");
-console.log(`   Port: ${port}`);
+console.log(`   WebSocket Port: ${port}`);
+console.log(`   HTTP Port: ${httpPort}`);
 console.log(`   Redis: ${process.env.REDIS_URL || "redis://localhost:6379"}`);
 console.log(
   `   Snapshots: ${
